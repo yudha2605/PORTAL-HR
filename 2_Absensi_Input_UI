@@ -1,0 +1,88 @@
+<div class="container-fluid" style="zoom: 0.85;">
+    <!-- Header Page -->
+    <div class="mb-4">
+        <h4 class="fw-bold text-dark mb-1"><i class="bi bi-pencil-square me-2 text-primary"></i>Input Absensi</h4>
+        <p class="text-muted small">Silakan isi form di bawah ini untuk mencatat kehadiran karyawan.</p>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <form id="attendanceForm">
+                        <!-- Pilih Tanggal -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-secondary">PILIH TANGGAL</label>
+                            <input type="date" id="abs_tanggal" class="form-control" required>
+                        </div>
+
+                        <!-- Pilih Cabang -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-secondary">PILIH CABANG</label>
+                            <select id="abs_cabang" class="form-select" onchange="filterEmployeeByBranch()" required>
+                                <option value="">Memuat data cabang...</option>
+                            </select>
+                        </div>
+
+                        <!-- Nama Karyawan -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-secondary">NAMA KARYAWAN</label>
+                            <select id="abs_nama" class="form-select" required disabled>
+                                <option value="">Pilih cabang terlebih dahulu</option>
+                            </select>
+                        </div>
+
+                        <!-- Status -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold small text-secondary">STATUS / WAKTU</label>
+                            <div class="row g-2">
+                                <div class="col-6 col-sm-4">
+                                    <input type="radio" class="btn-check" name="abs_status" id="st_waktu" value="Waktu" onchange="toggleTimeInput()" checked>
+                                    <label class="btn btn-outline-primary w-100 py-2 small" for="st_waktu">Input Waktu</label>
+                                </div>
+                                <div class="col-6 col-sm-4">
+                                    <input type="radio" class="btn-check" name="abs_status" id="st_off" value="OFF" onchange="toggleTimeInput()">
+                                    <label class="btn btn-outline-secondary w-100 py-2 small" for="st_off">OFF</label>
+                                </div>
+                                <div class="col-6 col-sm-4">
+                                    <input type="radio" class="btn-check" name="abs_status" id="st_sakit" value="SAKIT" onchange="toggleTimeInput()">
+                                    <label class="btn btn-outline-warning w-100 py-2 small" for="st_sakit">SAKIT</label>
+                                </div>
+                                <div class="col-6 col-sm-4">
+                                    <input type="radio" class="btn-check" name="abs_status" id="st_izin" value="IZIN" onchange="toggleTimeInput()">
+                                    <label class="btn btn-outline-info w-100 py-2 small" for="st_izin">IZIN</label>
+                                </div>
+                                <div class="col-6 col-sm-4">
+                                    <input type="radio" class="btn-check" name="abs_status" id="st_alpa" value="ALPA" onchange="toggleTimeInput()">
+                                    <label class="btn btn-outline-danger w-100 py-2 small" for="st_alpa">ALPA</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Input Waktu (Hanya muncul jika "Input Waktu" dipilih) -->
+                        <div id="timeInputContainer" class="mb-4">
+                            <label class="form-label fw-bold small text-secondary">JAM MASUK</label>
+                            <input type="time" id="abs_waktu" class="form-control">
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" id="btnSubmitAbsensi" class="btn btn-primary py-2 fw-bold">
+                                <i class="bi bi-send me-2"></i>Kirim Absensi
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-check:checked + .btn-outline-primary { background-color: #007bff; color: white; }
+    .btn-check:checked + .btn-outline-secondary { background-color: #6c757d; color: white; }
+    .btn-check:checked + .btn-outline-warning { background-color: #ffc107; color: white; }
+    .btn-check:checked + .btn-outline-info { background-color: #0dcaf0; color: white; }
+    .btn-check:checked + .btn-outline-danger { background-color: #dc3545; color: white; }
+</style>
+
+<?!= include('2_Absensi_Input_JS'); ?>

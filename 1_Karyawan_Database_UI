@@ -1,0 +1,295 @@
+<div class="container-fluid pb-0" id="main-page-container" style="zoom: 0.85;">
+    <!-- Header Page -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="fw-bold text-dark mb-1"><i class="bi bi-database-fill-gear me-2 text-primary"></i>Database Karyawan</h4>
+            <p class="text-muted small mb-0">Manajemen data profil dan informasi detail karyawan.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <div class="input-group input-group-sm" style="width: 280px;">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" id="searchInput" class="form-control border-start-0 ps-0" placeholder="Cari nama atau NIP..." onkeyup="filterTable()">
+            </div>
+            <button class="btn btn-sm btn-outline-primary" onclick="fetchData()">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Card -->
+    <div class="card border-0 shadow-sm mb-0" style="overflow: hidden;">
+        <div class="card-body p-0">
+            <!-- Loading Spinner -->
+            <div id="loader" class="text-center py-5">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3 text-secondary fw-medium">Menghubungkan ke database...</p>
+            </div>
+
+            <!-- Table Container -->
+            <div class="table-responsive" id="tableContainer" style="display: none;">
+                <table class="table table-hover align-middle mb-0" id="employeeTable">
+                    <thead>
+                    <tr>
+                        <th class="ps-4 py-3 border-0 text-secondary small text-uppercase">Nama</th>
+                        <th class="py-3 border-0 text-secondary small text-uppercase">
+                            <div class="d-flex align-items-center">
+                                <span>Cabang</span>
+                                <select id="filter-cabang" class="form-select form-select-sm ms-2 py-0 border-0 bg-transparent text-primary fw-bold" style="width: auto; font-size: 0.75rem; cursor: pointer;" onchange="applyFilters()">
+                                    <option value="">(Semua)</option>
+                                </select>
+                            </div>
+                        </th>
+                        <th class="py-3 border-0 text-secondary small text-uppercase">
+                            <div class="d-flex align-items-center">
+                                <span>Jabatan</span>
+                                <select id="filter-jabatan" class="form-select form-select-sm ms-2 py-0 border-0 bg-transparent text-primary fw-bold" style="width: auto; font-size: 0.75rem; cursor: pointer;" onchange="applyFilters()">
+                                    <option value="">(Semua)</option>
+                                </select>
+                            </div>
+                        </th>
+                        <th id="header-status" class="py-3 border-0 text-secondary small text-uppercase" style="cursor: pointer;" onclick="toggleResignFilter()" title="Klik untuk tampilkan/sembunyikan yang Resign">
+                            Status <i class="bi bi-eye-slash ms-1 text-muted"></i>
+                        </th>
+                        <th class="text-center pe-4 py-3 border-0 text-secondary small text-uppercase">Aksi</th>
+                    </tr>
+                    </thead>
+                    <tbody id="employeeTableBody">
+                    <!-- Data rows will be injected by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="text-center py-5" style="display: none;">
+                <i class="bi bi-folder-x fs-1 text-muted"></i>
+                <p class="mt-2 text-muted">Tidak ada data ditemukan.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Detail & Edit Karyawan -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-labelledby="detailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white py-3 d-print-none">
+                <h5 class="modal-title fw-bold" id="detailModalLabel">
+                    <i class="bi bi-person-badge me-2"></i>Profil Karyawan
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <div id="printableArea" class="modal-body p-0">
+                <!-- Mode Tampilan (View Mode / CV Style) -->
+                <div id="viewMode">
+                    <div class="row g-0">
+                        <!-- Sidebar CV -->
+                        <div class="col-md-4 col-4 bg-light border-end p-4 text-center cv-sidebar">
+                            <div class="mb-3">
+                                <img id="det_pasFoto" src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" 
+                                     alt="Pas Foto" class="img-thumbnail rounded-circle shadow-sm" 
+                                     style="width: 130px; height: 130px; object-fit: cover;">
+                            </div>
+                            <h5 id="det_nama_cv" class="fw-bold mb-1 text-dark" style="font-size: 1.15rem;">-</h5>
+                            <p id="det_jabatan_cv" class="text-primary small fw-semibold mb-3 text-uppercase" style="font-size: 0.75rem;">-</p>
+                            
+                            <hr class="my-3 opacity-50">
+                            
+                            <div class="text-start">
+                                <div class="mb-3">
+                                    <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">NIP</label>
+                                    <span id="det_nip" class="fw-bold text-dark small">-</span>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">Status Karyawan</label>
+                                    <span id="det_status" class="badge rounded-pill">-</span>
+                                </div>
+                                <div id="det_resign_container" class="mb-3" style="display: none;">
+                                    <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">Tgl Resign</label>
+                                    <span id="det_tglResign" class="fw-bold text-danger small">-</span>
+                                </div>
+                                <div class="mb-0">
+                                    <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">Cabang</label>
+                                    <span id="det_cabang" class="fw-semibold text-dark small">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Main Content CV -->
+                        <div class="col-md-8 col-8 p-4">
+                            <!-- Section: Data Pribadi -->
+                            <div class="mb-4">
+                                <h6 class="fw-bold text-dark border-bottom pb-2 mb-3" style="font-size: 0.9rem;">DATA PRIBADI</h6>
+                                <div class="row g-3">
+                                    <div class="col-6">
+                                        <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">NIK</label>
+                                        <span id="det_nik" class="fw-semibold text-dark small">-</span>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">Jenis Kelamin</label>
+                                        <span id="det_jk" class="fw-semibold text-dark small">-</span>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">Tempat, Tgl Lahir</label>
+                                        <span id="det_tglLahir" class="fw-semibold text-dark small">-</span>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">Golongan Darah</label>
+                                        <span id="det_goldar" class="badge bg-danger rounded-pill fw-normal" style="font-size: 0.7rem;">-</span>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">Alamat Lengkap</label>
+                                        <p id="det_alamat" class="small text-dark mb-0" style="font-size: 0.8rem; line-height: 1.4;">-</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Section: Kontak & Kepegawaian -->
+                            <div class="mb-0">
+                                <h6 class="fw-bold text-dark border-bottom pb-2 mb-3" style="font-size: 0.9rem;">KONTAK & PEKERJAAN</h6>
+                                <div class="row g-3">
+                                    <div class="col-6">
+                                        <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">No. WhatsApp</label>
+                                        <span id="det_wa" class="fw-semibold text-dark small">-</span>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">Email Pribadi</label>
+                                        <span id="det_email" class="fw-semibold text-primary small">-</span>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="text-muted x-small d-block mb-1" style="font-size: 0.6rem;">Tanggal Masuk</label>
+                                        <span id="det_tglMasuk" class="fw-semibold text-dark small">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mode Edit -->
+                <form id="editForm" class="p-4 d-print-none" style="display: none;">
+                    <input type="hidden" id="edit_row">
+                    <div class="row g-3">
+                        <div class="col-md-6"><label class="form-label small fw-bold">NIP</label><input type="text" id="edit_nip" class="form-control form-control-sm"></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Nama Karyawan</label><input type="text" id="edit_nama" class="form-control form-control-sm"></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">NIK</label><input type="text" id="edit_nik" class="form-control form-control-sm"></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Email Pribadi</label><input type="email" id="edit_email" class="form-control form-control-sm"></div>
+                        <div class="col-md-4"><label class="form-label small fw-bold">WhatsApp</label><input type="text" id="edit_wa" class="form-control form-control-sm"></div>
+                        <div class="col-md-4"><label class="form-label small fw-bold">Cabang</label><input type="text" id="edit_cabang" class="form-control form-control-sm"></div>
+                        <div class="col-md-4"><label class="form-label small fw-bold">Jabatan</label><input type="text" id="edit_jabatan" class="form-control form-control-sm"></div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Status</label>
+                            <select id="edit_status" class="form-select form-select-sm" onchange="toggleEditResignDate()">
+                                <option value="Bekerja">Bekerja</option>
+                                <option value="Resign">Resign</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4" id="edit_resign_date_container" style="display: none;">
+                            <label class="form-label small fw-bold text-danger">Tgl Resign</label>
+                            <input type="date" id="edit_tglResign" class="form-control form-control-sm border-danger">
+                        </div>
+                        <div class="col-md-4"><label class="form-label small fw-bold">Tgl Masuk</label><input type="date" id="edit_tglMasuk" class="form-control form-control-sm"></div>
+                        <div class="col-md-4"><label class="form-label small fw-bold">Gol. Darah</label><input type="text" id="edit_goldar" class="form-control form-control-sm"></div>
+                        <div class="col-12"><label class="form-label small fw-bold">Alamat</label><textarea id="edit_alamat" class="form-control form-control-sm" rows="2"></textarea></div>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="modal-footer bg-light border-0 d-flex justify-content-between d-print-none">
+                <div><button type="button" id="btnDelete" class="btn btn-outline-danger btn-sm px-3" onclick="deleteEmployee()"><i class="bi bi-trash"></i> Hapus</button></div>
+                <div class="d-flex gap-2">
+                    <button type="button" id="btnPrint" class="btn btn-outline-secondary btn-sm px-3" onclick="printProfile()"><i class="bi bi-printer"></i> Cetak</button>
+                    <button type="button" id="btnEdit" class="btn btn-primary btn-sm px-4" onclick="switchToEditMode()"><i class="bi bi-pencil-square"></i> Edit</button>
+                    <button type="button" id="btnClose" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Tutup</button>
+                    <button type="button" id="btnSave" class="btn btn-success btn-sm px-4" style="display: none;" onclick="saveChanges()">Simpan</button>
+                    <button type="button" id="btnCancel" class="btn btn-light btn-sm px-4 border" style="display: none;" onclick="switchToViewMode()">Batal</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .x-small { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; font-weight: 700; }
+    .badge { padding: 0.4em 0.7em; }
+    #det_pasFoto { border: 4px solid #fff; }
+
+    /* Fix Table Container & Sticky Header */
+    #tableContainer {
+        /* Meningkatkan nilai vh untuk mengimbangi zoom 0.85 agar mencapai dasar layar */
+        /* calc(118vh - 200px) disesuaikan agar footer dashboard tetap terlihat sedikit atau tabel maksimal ke bawah */
+        max-height: calc(118vh - 180px); 
+        overflow-y: auto;
+        overflow-x: auto;
+        position: relative;
+        background: white;
+    }
+
+    #employeeTable {
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+    }
+
+    /* CSS Utama untuk Sticky Header */
+    #employeeTable thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa !important;
+        z-index: 100;
+        box-shadow: inset 0 -1px 0 #dee2e6;
+        vertical-align: middle;
+    }
+
+    /* Hover effect for rows */
+    #employeeTableBody tr:hover {
+        background-color: rgba(0, 123, 255, 0.05);
+    }
+
+    /* Hilangkan scroll pada body utama jika di desktop agar tableContainer yang scroll */
+    @media (min-width: 768px) {
+        body {
+            overflow: hidden;
+        }
+    }
+
+    @media print {
+        @page { size: auto; margin: 0; }
+        
+        body { margin: 0; padding: 0; background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow: visible !important; }
+        .container-fluid { zoom: 1 !important; padding: 0 !important; }
+
+        #main-page-container, #sidebar, .main-header, #sidebar-overlay, .modal-backdrop, .d-print-none, .modal-header, .modal-footer {
+            display: none !important;
+        }
+
+        #detailModal {
+            position: absolute !important;
+            left: 0 !important; top: 0 !important; width: 100% !important; display: block !important;
+            opacity: 1 !important; visibility: visible !important; overflow: visible !important;
+        }
+
+        .modal-dialog { max-width: 100% !important; width: 100% !important; margin: 0 !important; transform: none !important; }
+        .modal-content { border: none !important; box-shadow: none !important; width: 100% !important; }
+        .modal-body { padding: 0 !important; }
+
+        .row.g-0 { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; width: 100% !important; margin: 0 !important; }
+        
+        .cv-sidebar {
+            width: 32% !important; flex: 0 0 32% !important; background-color: #f8f9fa !important;
+            min-height: 100vh; padding: 2rem 1rem !important;
+        }
+
+        .col-8 { width: 68% !important; flex: 0 0 68% !important; padding: 2rem !important; }
+        
+        .x-small { font-size: 7pt !important; }
+        h5 { font-size: 14pt !important; }
+        h6 { font-size: 11pt !important; }
+        span, p { font-size: 9pt !important; }
+        .badge { font-size: 8pt !important; }
+    }
+</style>
+
+<?!= include('1_Karyawan_Database_JS'); ?>

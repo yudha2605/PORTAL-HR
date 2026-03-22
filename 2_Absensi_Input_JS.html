@@ -1,0 +1,130 @@
+<script>
+    /**
+     * Data global untuk menampung list karyawan agar bisa difilter di sisi client
+     */
+    let attendanceEmployees = [];
+
+    /**
+     * Inisialisasi: Ambil data dropdown saat halaman dimuat
+     */
+    (function() {
+        google.script.run
+            .withSuccessHandler(populateAttendanceDropdowns)
+            .withFailureHandler(err => {
+                Swal.fire('Error', 'Gagal memuat data dropdown: ' + err.message, 'error');
+            })
+            .getAttendanceFormData();
+    })();
+
+    /**
+     * Mengisi dropdown Cabang dan menyimpan data Karyawan
+     */
+    function populateAttendanceDropdowns(data) {
+        attendanceEmployees = data.employees;
+        const selCabang = document.getElementById('abs_cabang');
+        
+        selCabang.innerHTML = '<option value="">-- Pilih Cabang --</option>';
+        data.branches.forEach(branch => {
+            selCabang.insertAdjacentHTML('beforeend', `<option value="${branch}">${branch}</option>`);
+        });
+    }
+
+    /**
+     * Filter dropdown Nama Karyawan berdasarkan Cabang yang dipilih
+     */
+    function filterEmployeeByBranch() {
+        const branch = document.getElementById('abs_cabang').value;
+        const selNama = document.getElementById('abs_nama');
+        
+        selNama.innerHTML = '<option value="">-- Pilih Karyawan --</option>';
+        
+        if (!branch) {
+            selNama.disabled = true;
+            return;
+        }
+
+        const filtered = attendanceEmployees.filter(emp => emp.cabang === branch);
+        
+        filtered.forEach(emp => {
+            selNama.insertAdjacentHTML('beforeend', `<option value="${emp.nama}">${emp.nama}</option>`);
+        });
+
+        selNama.disabled = false;
+    }
+
+    /**
+     * Menampilkan/Menyembunyikan input waktu berdasarkan status
+     */
+    function toggleTimeInput() {
+        const status = document.querySelector('input[name="abs_status"]:checked').value;
+        const timeContainer = document.getElementById('timeInputContainer');
+        const inputWaktu = document.getElementById('abs_waktu');
+
+        if (status === 'Waktu') {
+            timeContainer.style.display = 'block';
+            inputWaktu.required = true;
+        } else {
+            timeContainer.style.display = 'none';
+            inputWaktu.required = false;
+            inputWaktu.value = '';
+        }
+    }
+
+    /**
+     * Handle Submit Form
+     */
+    document.getElementById('attendanceForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const status = document.querySelector('input[name="abs_status"]:checked').value;
+        const rawWaktu = document.getElementById('abs_waktu').value;
+        
+        // Jika status bukan "Input Waktu", gunakan nama status sebagai nilai "waktu"
+        const finalWaktu = (status === 'Waktu') ? rawWaktu : status;
+
+        const formData = {
+            tanggal: document.getElementById('abs_tanggal').value,
+            cabang: document.getElementById('abs_cabang').value,
+            nama: document.getElementById('abs_nama').value,
+            waktu: finalWaktu
+        };
+
+        if (status === 'Waktu' && !rawWaktu) {
+            Swal.fire('Peringatan', 'Jam masuk wajib diisi jika memilih Input Waktu', 'warning');
+            return;
+        }
+
+        Swal.fire({
+            title: 'Kirim Absensi?',
+            text: `Absensi untuk ${formData.nama} pada tanggal ${formData.tanggal}`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#007bff'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({ title: 'Mengirim...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+                google.script.run
+                    .withSuccessHandler(function(response) {
+                        if (response.success) {
+                            Swal.fire('Berhasil!', 'Data absensi telah disimpan.', 'success');
+                            document.getElementById('attendanceForm').reset();
+                            toggleTimeInput();
+                        } else {
+                            // Tampilkan popup input ditolak karena double entri
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Input Ditolak',
+                                text: response.message,
+                                confirmButtonColor: '#dc3545'
+                            });
+                        }
+                    })
+                    .withFailureHandler(err => {
+                        Swal.fire('Gagal', err.message, 'error');
+                    })
+                    .saveAttendance(formData);
+            }
+        });
+    });
+</script>

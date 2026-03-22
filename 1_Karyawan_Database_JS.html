@@ -1,0 +1,388 @@
+<script>
+    /**
+     * Menggunakan 'var' agar tidak error saat script dimuat ulang (re-declaration)
+     */
+    var allEmployeeData = window.allEmployeeData || [];
+    var currentEditingEmp = null;
+
+    /**
+     * Memanggil data dari server (Code.gs)
+     */
+    function fetchData(forceRefresh = false) {
+        const loader = document.getElementById('loader');
+        const container = document.getElementById('tableContainer');
+        const emptyState = document.getElementById('emptyState');
+
+        // Jika data sudah ada di window (cache) dan tidak dipaksa refresh
+        if (window.allEmployeeData && window.allEmployeeData.length > 0 && !forceRefresh) {
+            console.log("Menggunakan data dari cache.");
+            if (loader) loader.style.display = 'none';
+            showEmployees(window.allEmployeeData);
+            return;
+        }
+
+        if (loader) loader.style.display = 'block';
+        if (container) container.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'none';
+
+        console.log("Memulai fetch data dari server...");
+        
+        google.script.run
+            .withSuccessHandler(function(data) {
+                console.log("Data berhasil diterima dari server:", data ? data.length : 0, "item");
+                
+                // Pastikan loader hilang sebelum proses render yang mungkin berat
+                if (loader) loader.style.display = 'none';
+                
+                window.allEmployeeData = data || []; 
+                showEmployees(window.allEmployeeData);
+            })
+            .withFailureHandler(function(err) {
+                console.error("Gagal mengambil data:", err);
+                if (loader) loader.style.display = 'none';
+                
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Koneksi Gagal',
+                    text: 'Gagal mengambil data dari database: ' + err.message,
+                    confirmButtonColor: '#007bff'
+                });
+            })
+            .getEmployeeData();
+    }
+
+    /**
+     * Memproses array data dan memasukkannya ke tabel HTML
+     */
+    function showEmployees(data) {
+        try {
+            const container = document.getElementById('tableContainer');
+            
+            // Validasi data
+            if (!Array.isArray(data)) {
+                console.warn("Data yang diterima bukan array:", data);
+                document.getElementById('emptyState').style.display = 'block';
+                return;
+            }
+
+            populateDropdowns(data);
+            applyFilters();
+            
+            if (container) container.style.display = 'block';
+        } catch (e) {
+            console.error("Error in showEmployees:", e);
+            if (document.getElementById('loader')) document.getElementById('loader').style.display = 'none';
+        }
+    }
+
+    function populateDropdowns(data) {
+        const selCabang = document.getElementById('filter-cabang');
+        const selJabatan = document.getElementById('filter-jabatan');
+        if (!selCabang || !selJabatan || !data) return;
+
+        const cabangs = [...new Set(data.map(item => item.cabang).filter(Boolean))].sort();
+        const jabatans = [...new Set(data.map(item => item.jabatan).filter(Boolean))].sort();
+
+        // Simpan nilai yang sedang terpilih agar tidak reset saat refresh
+        const currentCabang = selCabang.value;
+        const currentJabatan = selJabatan.value;
+
+        selCabang.innerHTML = '<option value="">(Semua)</option>';
+        selJabatan.innerHTML = '<option value="">(Semua)</option>';
+
+        cabangs.forEach(cb => selCabang.insertAdjacentHTML('beforeend', `<option value="${cb}">${cb}</option>`));
+        jabatans.forEach(jb => selJabatan.insertAdjacentHTML('beforeend', `<option value="${jb}">${jb}</option>`));
+        
+        // Kembalikan nilai filter jika masih ada di data baru
+        if (cabangs.includes(currentCabang)) selCabang.value = currentCabang;
+        if (jabatans.includes(currentJabatan)) selJabatan.value = currentJabatan;
+    }
+
+    function applyFilters() {
+        if (!window.allEmployeeData) return;
+        
+        const queryInput = document.getElementById('searchInput');
+        const query = queryInput ? queryInput.value.toLowerCase() : "";
+        
+        const selCabang = document.getElementById('filter-cabang');
+        const fCabang = selCabang ? selCabang.value : "";
+        
+        const selJabatan = document.getElementById('filter-jabatan');
+        const fJabatan = selJabatan ? selJabatan.value : "";
+        
+        const filteredData = window.allEmployeeData.filter(emp => {
+            const nama = (emp.nama || "").toLowerCase();
+            const nip = (emp.nip || "").toString().toLowerCase();
+            
+            const matchSearch = nama.includes(query) || nip.includes(query);
+            const matchCabang = fCabang === "" ? true : (emp.cabang === fCabang);
+            const matchJabatan = fJabatan === "" ? true : (emp.jabatan === fJabatan);
+            const matchResign = window.showResigned ? true : (emp.status !== 'Resign');
+
+            return matchSearch && matchCabang && matchJabatan && matchResign;
+        });
+
+        renderTable(filteredData);
+    }
+
+    function renderTable(data) {
+        const tbody = document.getElementById('employeeTableBody');
+        const emptyState = document.getElementById('emptyState');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        if (!data || data.length === 0) {
+            if (emptyState) emptyState.style.display = 'block';
+            return;
+        }
+
+        if (emptyState) emptyState.style.display = 'none';
+
+        data.forEach((emp) => {
+            const isResign = (emp.status === 'Resign');
+            // Escape nama untuk onclick agar tidak error jika ada tanda kutip
+            const safeName = (emp.nama || "").replace(/'/g, "\\'");
+            
+            const row = `
+                <tr class="${isResign ? 'table-light opacity-75' : ''}">
+                    <td class="ps-4 fw-semibold text-dark">${emp.nama || '-'}</td>
+                    <td class="text-secondary">${emp.cabang || '-'}</td>
+                    <td><span class="badge bg-light text-dark border fw-normal">${emp.jabatan || '-'}</span></td>
+                    <td>
+                        <span class="badge ${isResign ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success'}">
+                            ${emp.status || '-'}
+                        </span>
+                    </td>
+                    <td class="text-center pe-4">
+                        <button class="btn btn-sm btn-primary rounded-pill px-3" onclick="showDetailByName('${safeName}')">
+                            <i class="bi bi-info-circle me-1"></i> Detail
+                        </button>
+                    </td>
+                </tr>
+            `;
+            tbody.insertAdjacentHTML('beforeend', row);
+        });
+    }
+
+    function filterTable() { applyFilters(); }
+
+    function toggleResignFilter() {
+        window.showResigned = !window.showResigned;
+        const headerStatus = document.getElementById('header-status');
+        if (headerStatus) {
+            headerStatus.innerHTML = `Status <i class="bi bi-${window.showResigned ? 'eye-fill text-primary' : 'eye-slash text-muted'} ms-1"></i>`;
+        }
+        applyFilters();
+    }
+
+    function formatDateForInput(dateStr) {
+        if (!dateStr || !dateStr.includes('/')) return "";
+        const parts = dateStr.split('/');
+        if (parts.length !== 3) return "";
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+
+    function formatDateForSheet(dateStr) {
+        if (!dateStr || !dateStr.includes('-')) return dateStr;
+        const parts = dateStr.split('-');
+        if (parts.length !== 3) return dateStr;
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+
+    function getGoogleDriveThumb(url) {
+        if (!url || !url.includes('id=')) {
+            if (url && url.includes('/d/')) {
+                try {
+                    const id = url.split('/d/')[1].split('/')[0];
+                    return `https://lh3.googleusercontent.com/u/0/d/${id}`;
+                } catch(e) { return "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"; }
+            }
+            return "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
+        }
+        const id = url.split('id=')[1].split('&')[0];
+        return `https://lh3.googleusercontent.com/u/0/d/${id}`;
+    }
+
+    function showDetailByName(name) {
+        const emp = window.allEmployeeData.find(e => e.nama === name);
+        if (!emp) return;
+        switchToViewMode();
+
+        document.getElementById('det_pasFoto').src = getGoogleDriveThumb(emp.pasFoto);
+        document.getElementById('det_nama_cv').innerText = emp.nama || '-';
+        document.getElementById('det_jabatan_cv').innerText = emp.jabatan || '-';
+        document.getElementById('det_nip').innerText = emp.nip || '-';
+        document.getElementById('det_nik').innerText = emp.nik || '-';
+        document.getElementById('det_jk').innerText = emp.jenisKelamin || '-';
+        document.getElementById('det_tglLahir').innerText = emp.tglLahir || '-';
+        document.getElementById('det_goldar').innerText = emp.goldar || '-';
+        document.getElementById('det_alamat').innerText = emp.alamat || '-';
+        document.getElementById('det_email').innerText = emp.email || '-';
+        document.getElementById('det_wa').innerText = emp.wa || '-';
+        document.getElementById('det_tglMasuk').innerText = emp.tglMasuk || '-';
+        document.getElementById('det_cabang').innerText = emp.cabang || '-';
+        
+        const statusBadge = document.getElementById('det_status');
+        if (statusBadge) {
+            statusBadge.innerText = emp.status || '-';
+            statusBadge.className = `badge rounded-pill ${emp.status === 'Resign' ? 'bg-danger' : 'bg-success'}`;
+        }
+
+        const resignCont = document.getElementById('det_resign_container');
+        if(resignCont) {
+            if(emp.status === 'Resign') {
+                resignCont.style.display = 'block';
+                document.getElementById('det_tglResign').innerText = emp.tglResign || '-';
+            } else {
+                resignCont.style.display = 'none';
+            }
+        }
+
+        // Setup Edit Form
+        const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val || ''; };
+        setVal('edit_row', emp.row);
+        setVal('edit_nip', emp.nip);
+        setVal('edit_nama', emp.nama);
+        setVal('edit_nik', emp.nik);
+        setVal('edit_email', emp.email);
+        setVal('edit_wa', emp.wa);
+        setVal('edit_cabang', emp.cabang);
+        setVal('edit_jabatan', emp.jabatan);
+        setVal('edit_status', emp.status || 'Bekerja');
+        setVal('edit_tglResign', formatDateForInput(emp.tglResign));
+        setVal('edit_tglMasuk', formatDateForInput(emp.tglMasuk));
+        setVal('edit_goldar', emp.goldar);
+        setVal('edit_alamat', emp.alamat);
+        
+        toggleEditResignDate();
+
+        const modalEl = document.getElementById('detailModal');
+        if (modalEl) {
+            const myModal = new bootstrap.Modal(modalEl);
+            myModal.show();
+        }
+    }
+
+    function toggleEditResignDate() {
+        const statusEl = document.getElementById('edit_status');
+        const container = document.getElementById('edit_resign_date_container');
+        if (statusEl && container) {
+            container.style.display = (statusEl.value === 'Resign') ? 'block' : 'none';
+        }
+    }
+
+    function switchToEditMode() {
+        document.getElementById('viewMode').style.display = 'none';
+        document.getElementById('editForm').style.display = 'block';
+        document.getElementById('btnEdit').style.display = 'none';
+        document.getElementById('btnClose').style.display = 'none';
+        document.getElementById('btnSave').style.display = 'inline-block';
+        document.getElementById('btnCancel').style.display = 'inline-block';
+        document.getElementById('btnPrint').style.display = 'none';
+    }
+
+    function switchToViewMode() {
+        document.getElementById('viewMode').style.display = 'block';
+        document.getElementById('editForm').style.display = 'none';
+        document.getElementById('btnEdit').style.display = 'inline-block';
+        document.getElementById('btnClose').style.display = 'inline-block';
+        document.getElementById('btnSave').style.display = 'none';
+        document.getElementById('btnCancel').style.display = 'none';
+        document.getElementById('btnPrint').style.display = 'inline-block';
+    }
+
+    function saveChanges() {
+        const status = document.getElementById('edit_status').value;
+        const tglResignInput = document.getElementById('edit_tglResign').value;
+        const tglMasukInput = document.getElementById('edit_tglMasuk').value;
+
+        if (status === 'Resign' && !tglResignInput) {
+            Swal.fire({ icon: 'warning', title: 'Perhatian', text: 'Tanggal Resign wajib diisi!', confirmButtonColor: '#ffc107' });
+            return;
+        }
+
+        const formData = {
+            row: document.getElementById('edit_row').value,
+            nip: document.getElementById('edit_nip').value,
+            nama: document.getElementById('edit_nama').value,
+            nik: document.getElementById('edit_nik').value,
+            email: document.getElementById('edit_email').value,
+            wa: document.getElementById('edit_wa').value,
+            cabang: document.getElementById('edit_cabang').value,
+            jabatan: document.getElementById('edit_jabatan').value,
+            status: status,
+            tglResign: formatDateForSheet(tglResignInput),
+            tglMasuk: formatDateForSheet(tglMasukInput),
+            goldar: document.getElementById('edit_goldar').value,
+            alamat: document.getElementById('edit_alamat').value
+        };
+
+        Swal.fire({
+            title: 'Simpan Perubahan?',
+            text: "Data karyawan akan diperbarui.",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#28a745'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({ title: 'Menyimpan...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                google.script.run
+                    .withSuccessHandler(() => {
+                        Swal.fire('Berhasil!', 'Data telah diperbarui.', 'success');
+                        const modalEl = document.getElementById('detailModal');
+                        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                        if (modalInstance) modalInstance.hide();
+                        fetchData(true);
+                    })
+                    .withFailureHandler(err => Swal.fire('Error', err.message, 'error'))
+                    .updateEmployeeData(formData);
+            }
+        });
+    }
+
+    function deleteEmployee() {
+        const rowNum = document.getElementById('edit_row').value;
+        const nama = document.getElementById('edit_nama').value;
+
+        Swal.fire({
+            title: 'Hapus Data?',
+            text: `Anda akan menghapus data ${nama}.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            confirmButtonText: 'Ya, Hapus!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({ title: 'Menghapus...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                google.script.run
+                    .withSuccessHandler(() => {
+                        Swal.fire('Terhapus!', 'Data telah dihapus.', 'success');
+                        const modalEl = document.getElementById('detailModal');
+                        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                        if (modalInstance) modalInstance.hide();
+                        fetchData(true);
+                    })
+                    .withFailureHandler(err => Swal.fire('Error', err.message, 'error'))
+                    .deleteEmployeeData(rowNum);
+            }
+        });
+    }
+
+    /**
+     * Fitur Print Profil
+     */
+    function printProfile() {
+        window.print();
+    }
+
+    /**
+     * Jalankan fetchData saat script dimuat
+     */
+    (function() {
+        if (typeof window.showResigned === 'undefined') window.showResigned = false;
+        // Gunakan requestAnimationFrame agar UI stabil dulu
+        window.requestAnimationFrame(() => {
+            fetchData();
+        });
+    })();
+</script>

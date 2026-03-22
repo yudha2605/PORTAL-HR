@@ -1,0 +1,293 @@
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    (function() {
+        // State Management
+        let currentOffset = 0;
+        const limit = 50;
+        let isLoadingMore = false;
+        let allDataLoaded = false;
+        let searchTimeout = null;
+
+        /**
+         * Fungsi utama inisialisasi
+         */
+        function initMonitoring() {
+            // Gunakan Cache Global agar data tidak hilang saat pindah menu
+            if (window.globalAttendanceCache && window.globalAttendanceCache.length > 0) {
+                renderTable(window.globalAttendanceCache);
+                showLoader(false);
+                // Sinkronkan offset dengan panjang cache
+                currentOffset = window.globalAttendanceCache.length;
+            } else {
+                fetchInitialData();
+            }
+            
+            const form = document.getElementById('editAttendanceForm');
+            if (form) {
+                form.onsubmit = function(e) {
+                    e.preventDefault();
+                    updateAttendance();
+                };
+            }
+
+            // Infinite Scroll
+            window.onscroll = function() {
+                const searchVal = document.getElementById('searchInput').value;
+                // Hanya load more jika tidak sedang mencari (atau sesuaikan jika ingin infinite search)
+                if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 100) {
+                    if (!isLoadingMore && !allDataLoaded && !searchVal) {
+                        loadMoreData();
+                    }
+                }
+            };
+        }
+
+        /**
+         * Mengambil data awal atau Refresh
+         */
+        window.fetchInitialData = function(isRefresh = false) {
+            showLoader(true);
+            currentOffset = 0;
+            allDataLoaded = false;
+            if (isRefresh) window.globalAttendanceCache = [];
+            
+            google.script.run
+                .withSuccessHandler(function(data) {
+                    window.globalAttendanceCache = data;
+                    renderTable(data);
+                    showLoader(false);
+                    if (!data || data.length < limit) allDataLoaded = true;
+                })
+                .withFailureHandler(function(error) {
+                    showLoader(false);
+                    Swal.fire('Error', error.message, 'error');
+                })
+                .getAttendanceData(limit, 0, "");
+        }
+
+        /**
+         * Load batch berikutnya (Infinite Scroll)
+         */
+        function loadMoreData() {
+            isLoadingMore = true;
+            currentOffset += limit;
+            
+            const tbody = document.getElementById('attendanceTableBody');
+            const loadRow = document.createElement('tr');
+            loadRow.id = 'loading-more-row';
+            loadRow.innerHTML = `<td colspan="5" class="text-center py-3 text-muted small"><div class="spinner-border spinner-border-sm me-2"></div> Memuat lebih banyak...</td>`;
+            tbody.appendChild(loadRow);
+
+            google.script.run
+                .withSuccessHandler(function(data) {
+                    const loaderRow = document.getElementById('loading-more-row');
+                    if (loaderRow) loaderRow.remove();
+
+                    if (!data || data.length === 0) {
+                        allDataLoaded = true;
+                        isLoadingMore = false;
+                        return;
+                    }
+
+                    window.globalAttendanceCache = window.globalAttendanceCache.concat(data);
+                    appendRowsToTable(data);
+                    isLoadingMore = false;
+                    if (data.length < limit) allDataLoaded = true;
+                })
+                .withFailureHandler(function(error) {
+                    const loaderRow = document.getElementById('loading-more-row');
+                    if (loaderRow) loaderRow.remove();
+                    isLoadingMore = false;
+                })
+                .getAttendanceData(limit, currentOffset, "");
+        }
+
+        /**
+         * Pencarian Server-Side dengan Debounce
+         */
+        window.filterTable = function() {
+            const query = document.getElementById('searchInput').value.trim();
+            
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                if (query.length > 0) {
+                    showLoader(true);
+                    google.script.run
+                        .withSuccessHandler(function(data) {
+                            renderTable(data);
+                            showLoader(false);
+                            allDataLoaded = true; // Matikan infinite scroll saat mode cari
+                        })
+                        .withFailureHandler(function(error) {
+                            showLoader(false);
+                            console.error(error);
+                        })
+                        .getAttendanceData(100, 0, query); // Ambil 100 hasil pencarian
+                } else {
+                    // Jika hapus pencarian, balik ke data cache
+                    renderTable(window.globalAttendanceCache);
+                    allDataLoaded = (window.globalAttendanceCache.length < limit);
+                }
+            }, 500); // Tunggu 500ms setelah mengetik
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('attendanceTableBody');
+            const container = document.getElementById('tableContainer');
+            const emptyState = document.getElementById('emptyState');
+            
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                container.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            container.style.display = 'block';
+            emptyState.style.display = 'none';
+            appendRowsToTable(data);
+        }
+
+        function appendRowsToTable(data) {
+            const tbody = document.getElementById('attendanceTableBody');
+            if (!tbody) return;
+            
+            data.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="ps-4 small fw-medium">${item.tanggal}</td>
+                    <td class="small text-dark fw-bold">${item.nama}</td>
+                    <td class="small">${item.cabang}</td>
+                    <td class="small"><span class="badge bg-light text-dark border py-2 px-3 fs-6">${item.waktu}</span></td>
+                    <td class="text-center pe-4">
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary btn-edit-att" data-item='${JSON.stringify(item)}' title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-outline-danger btn-delete-att" data-row="${item.row}" title="Hapus">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Re-bind click events
+            document.querySelectorAll('.btn-edit-att').forEach(btn => {
+                btn.onclick = function() { openEditModal(JSON.parse(this.getAttribute('data-item'))); };
+            });
+            document.querySelectorAll('.btn-delete-att').forEach(btn => {
+                btn.onclick = function() { confirmDelete(this.getAttribute('data-row')); };
+            });
+        }
+
+        window.toggleTimeInput = function() {
+            const status = document.getElementById('edit_status_hadir').value;
+            const container = document.getElementById('time_input_container');
+            const timeInput = document.getElementById('edit_waktu');
+            if (status === 'HADIR') {
+                container.style.display = 'block';
+                timeInput.required = true;
+            } else {
+                container.style.display = 'none';
+                timeInput.required = false;
+                timeInput.value = status; 
+            }
+        }
+
+        function openEditModal(item) {
+            document.getElementById('edit_row').value = item.row;
+            const parts = item.tanggal.split('/');
+            const dateFormatted = `${parts[2]}-${parts[1]}-${parts[0]}`;
+            document.getElementById('edit_tanggal').value = dateFormatted;
+            document.getElementById('edit_nama').value = item.nama;
+            document.getElementById('edit_cabang').value = item.cabang;
+            const statusSelect = document.getElementById('edit_status_hadir');
+            const timeInput = document.getElementById('edit_waktu');
+            const statusOptions = ['OFF', 'SAKIT', 'IZIN', 'ALPA'];
+            if (statusOptions.includes(item.waktu)) {
+                statusSelect.value = item.waktu;
+                timeInput.value = "";
+            } else {
+                statusSelect.value = "HADIR";
+                timeInput.value = item.waktu;
+            }
+            toggleTimeInput();
+            const modal = new bootstrap.Modal(document.getElementById('editAttendanceModal'));
+            modal.show();
+        }
+
+        function updateAttendance() {
+            const btn = document.getElementById('btnSaveAttendance');
+            const btnText = document.getElementById('btnSaveAttendanceText');
+            const btnLoader = document.getElementById('btnSaveAttendanceLoader');
+            const statusHadir = document.getElementById('edit_status_hadir').value;
+            const finalWaktu = (statusHadir === 'HADIR') ? document.getElementById('edit_waktu').value : statusHadir;
+
+            const rowData = {
+                row: document.getElementById('edit_row').value,
+                tanggal: document.getElementById('edit_tanggal').value,
+                nama: document.getElementById('edit_nama').value,
+                cabang: document.getElementById('edit_cabang').value,
+                waktu: finalWaktu
+            };
+
+            btn.disabled = true;
+            btnText.innerText = 'Menyimpan...';
+            btnLoader.classList.remove('d-none');
+
+            google.script.run
+                .withSuccessHandler(function() {
+                    btn.disabled = false;
+                    btnText.innerText = 'Simpan Perubahan';
+                    btnLoader.classList.add('d-none');
+                    const modalElement = document.getElementById('editAttendanceModal');
+                    const modal = bootstrap.Modal.getInstance(modalElement);
+                    if (modal) modal.hide();
+                    Swal.fire({ icon: 'success', title: 'Berhasil', timer: 1500, showConfirmButton: false });
+                    fetchInitialData(true); // Refresh cache
+                })
+                .withFailureHandler(function(error) {
+                    btn.disabled = false;
+                    btnText.innerText = 'Simpan Perubahan';
+                    btnLoader.classList.add('d-none');
+                    Swal.fire('Error', error.message, 'error');
+                })
+                .updateAttendanceData(rowData);
+        }
+
+        function confirmDelete(rowNum) {
+            Swal.fire({
+                title: 'Hapus Data?',
+                text: "Data akan dihapus permanen!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Ya, Hapus!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'Menghapus...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+                    google.script.run
+                        .withSuccessHandler(function() {
+                            Swal.fire({ icon: 'success', title: 'Terhapus!', timer: 1500, showConfirmButton: false });
+                            fetchInitialData(true); // Refresh cache
+                        })
+                        .withFailureHandler(function(error) { Swal.fire('Error', error.message, 'error'); })
+                        .deleteAttendanceData(rowNum);
+                }
+            });
+        }
+
+        function showLoader(show) {
+            const loader = document.getElementById('loader');
+            const table = document.getElementById('tableContainer');
+            if (loader) loader.style.display = show ? 'block' : 'none';
+            if (table) table.style.display = show ? 'none' : 'block';
+        }
+
+        initMonitoring();
+    })();
+</script>

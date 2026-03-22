@@ -1,0 +1,98 @@
+<style>
+  :root {
+    --primary-color: #007bff;
+    --navy-blue: #0f172a;
+    --light-gray: #f8fafc;
+    --sidebar-width: 260px;
+    --border-radius: 12px;
+  }
+
+  body {
+    font-family: 'Inter', 'Roboto', sans-serif;
+    background-color: var(--light-gray);
+    color: #334155;
+    overflow-x: hidden;
+  }
+
+  /* Sidebar */
+  #sidebar {
+    width: var(--sidebar-width);
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    background-color: var(--navy-blue);
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease;
+  }
+
+  /* Sidebar Hidden State */
+  #sidebar.collapsed {
+    left: calc(-1 * var(--sidebar-width));
+  }
+
+  /* Rounded Elements */
+  .card, 
+  .btn, 
+  .stat-card, 
+  .table-container, 
+  .form-control,
+  .badge {
+    border-radius: var(--border-radius) !important;
+  }
+
+  .btn-primary {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+  }
+
+  /* Content Area */
+  #content {
+    margin-left: var(--sidebar-width);
+    width: calc(100% - var(--sidebar-width));
+    min-height: 100vh;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  /* Content when Sidebar Collapsed */
+  #content.expanded {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  /* Table Hover Effect */
+  .table-hover tbody tr {
+    transition: background-color 0.2s ease;
+  }
+
+  .table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.05) !important;
+    cursor: pointer;
+  }
+
+  /* Utility */
+  .text-primary { color: var(--primary-color) !important; }
+  .bg-primary { background-color: var(--primary-color) !important; }
+
+  /* Overlay for mobile */
+  #sidebar-overlay {
+    display: none;
+    position: fixed;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.3);
+    z-index: 1040;
+    top: 0;
+    left: 0;
+  }
+
+  @media (max-width: 768px) {
+    #sidebar { left: calc(-1 * var(--sidebar-width)); }
+    #sidebar.active { left: 0; }
+    #content { margin-left: 0; width: 100%; }
+    #sidebar-overlay.active { display: block; }
+  }
+</style>
